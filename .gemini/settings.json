@@ -6,9 +6,9 @@
     }
   },
   "hooks": {
-    "AfterTool": [
+    "AfterAgent": [
       {
-        "matcher": "write_file|replace|run_shell_command",
+        "matcher": "*",
         "hooks": [
           {
             "name": "verify-changes",
