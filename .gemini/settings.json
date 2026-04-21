@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "supabase": {
+      "url": "https://mcp.supabase.com/mcp?project_ref=wogjtticefkxnxhfnnne",
+      "type": "http"
+    }
+  },
+  "hooks": {
+    "AfterTool": [
+      {
+        "matcher": "write_file|replace|run_shell_command",
+        "hooks": [
+          {
+            "name": "verify-changes",
+            "type": "command",
+            "command": "node .gemini/hooks/verify.js",
+            "timeout": 60000
+          }
+        ]
+      }
+    ]
+  }
+}
