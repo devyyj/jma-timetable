@@ -15,6 +15,7 @@ async function getTimetableData() {
   });
 
   // Ensure types are strictly matched for the client component
+  const currentHour = new Date().getHours();
   return { 
     rooms: rooms.map(r => ({
       id: r.id,
@@ -28,7 +29,8 @@ async function getTimetableData() {
       startTime: res.startTime,
       guestName: res.guestName
     })), 
-    today 
+    today,
+    currentHour
   };
 }
 

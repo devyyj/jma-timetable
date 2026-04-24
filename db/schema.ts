@@ -31,6 +31,7 @@ export const reservations = pgTable("reservations", {
   date: date("date").notNull(),
   startTime: integer("start_time").notNull(),
   endTime: integer("end_time").notNull(),
+  password: text("password"), // 4-digit password for guests
   status: text("status").default("confirmed").notNull(), // "confirmed", "cancelled", "noshow", "lesson"
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

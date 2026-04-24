@@ -4,20 +4,5 @@
       "url": "https://mcp.supabase.com/mcp?project_ref=wogjtticefkxnxhfnnne",
       "type": "http"
     }
-  },
-  "hooks": {
-    "AfterAgent": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "name": "verify-changes",
-            "type": "command",
-            "command": "node .gemini/hooks/verify.js",
-            "timeout": 60000
-          }
-        ]
-      }
-    ]
   }
 }

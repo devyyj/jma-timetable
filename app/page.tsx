@@ -15,10 +15,6 @@ export default function Home() {
             <h1 className="text-xl font-bold tracking-tight text-slate-900">JMA <span className="text-indigo-600">Timetable</span></h1>
           </div>
           <div className="flex items-center gap-4">
-             <div className="px-3 py-1.5 bg-slate-100 rounded-full text-xs font-medium text-slate-600 flex items-center gap-1.5">
-               <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-               Real-time Live
-             </div>
           </div>
         </div>
       </div>
@@ -38,13 +34,8 @@ export default function Home() {
         </div>
       </div>
 
-      <footer className="max-w-7xl mx-auto px-4 mt-20 pb-10 border-t border-slate-100 pt-10 flex flex-col sm:flex-row items-center justify-between gap-4 text-slate-400 text-sm">
-        <p>© 2026 JMA Practice Room. All rights reserved.</p>
-        <div className="flex items-center gap-6">
-          <a href="#" className="hover:text-indigo-600 transition-colors">이용 약관</a>
-          <a href="#" className="hover:text-indigo-600 transition-colors">개인정보 처리방침</a>
-          <a href="#" className="hover:text-indigo-600 transition-colors">문의하기</a>
-        </div>
+      <footer className="max-w-7xl mx-auto px-4 mt-20 pb-10 border-t border-slate-100 pt-10 text-center text-slate-300 text-sm font-medium">
+        <p>연습실 이용 수칙을 준수해 주시기 바랍니다</p>
       </footer>
 
       {/* Real-time Listener (No UI) */}

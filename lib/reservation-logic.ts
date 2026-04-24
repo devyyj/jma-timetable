@@ -11,6 +11,7 @@ export interface ExistingReservation {
   startTime: number;
   date: string;
   userId?: string | null;
+  guestName?: string | null;
 }
 
 export function validateReservationRule(params: {
@@ -19,8 +20,10 @@ export function validateReservationRule(params: {
   date: string;
   existingReservations: ExistingReservation[];
   currentUserId?: string;
+  currentGuestName?: string;
+  now?: Date; // 테스트를 위한 현재 시각 주입
 }) {
-  const { roomId, startTime, date, existingReservations, currentUserId } = params;
+  const { roomId, startTime, date, existingReservations, currentUserId, currentGuestName, now = new Date() } = params;
 
   // 1. 이미 해당 시간에 예약이 있는지 확인 (중복 예약 방지)
   const isDuplicate = existingReservations.some(
@@ -30,29 +33,58 @@ export function validateReservationRule(params: {
     return { allowed: false, message: "이미 예약된 시간대입니다." };
   }
 
-  // 2. 55분 연장 규칙 검증
-  // 사용자가 '이전 시간'을 사용 중인지 확인
+  // 2. 연속 시간 검증 (회원 ID 또는 비회원 이름 기준)
   const previousStartTime = startTime - 1;
-  const isContinuing = existingReservations.some(
-    (res) =>
-      res.roomId === roomId &&
-      res.date === date &&
-      res.startTime === previousStartTime &&
-      res.userId === currentUserId
-  );
+  const nextStartTime = startTime + 1;
 
-  if (isContinuing) {
-    const now = new Date();
-    const currentMinutes = now.getMinutes();
+  // (1) 뒷 시간(startTime + 1) 확인: 우회 예약 방지
+  const nextReservation = existingReservations.find(
+    (res) => res.roomId === roomId && res.date === date && res.startTime === nextStartTime
+  );
+  if (nextReservation) {
+    const isSameUser = 
+      (currentUserId && nextReservation.userId === currentUserId) ||
+      (currentGuestName && nextReservation.guestName === currentGuestName);
     
-    // 현재 시간이 예약하려는 시간의 '직전 시간'대인지 확인하는 로직 (단순화)
-    // 실제 서버에서는 현재 시각의 '시'와 '분'을 모두 체크해야 함.
-    // 여기서는 테스트를 위해 '분'만 체크.
-    if (currentMinutes < 55) {
+    if (isSameUser) {
       return { 
         allowed: false, 
-        message: "다음 시간 예약은 현재 사용 중인 시간 종료 5분 전(55분)부터 가능합니다." 
+        message: "연속된 시간은 예약할 수 없습니다. (뒷시간 예약이 이미 존재합니다)" 
       };
+    }
+  }
+
+  // (2) 앞 시간(startTime - 1) 확인: 55분 룰 적용
+  const previousReservation = existingReservations.find(
+    (res) => res.roomId === roomId && res.date === date && res.startTime === previousStartTime
+  );
+
+  if (previousReservation) {
+    const isSameUser = 
+      (currentUserId && previousReservation.userId === currentUserId) ||
+      (currentGuestName && previousReservation.guestName === currentGuestName);
+
+    if (isSameUser) {
+      // 한국 표준시(KST) 기준으로 현재 시각 확인
+      const nowKST = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+      const currentHour = nowKST.getHours();
+      const currentMinutes = nowKST.getMinutes();
+      
+      // 현재 이용 중인 시간(previousStartTime)의 55분부터만 다음 시간 예약 가능
+      if (currentHour === previousStartTime) {
+        if (currentMinutes < 55) {
+          return { 
+            allowed: false, 
+            message: `연속 예약은 이용 중인 시간 종료 5분 전(${previousStartTime}:55)부터 가능합니다.` 
+          };
+        }
+      } else {
+        // 현재 이용 중인 시간대가 아니거나 이미 지난 경우 등
+        return {
+          allowed: false,
+          message: "연속 예약은 현재 이용 중인 시간 종료 5분 전부터만 가능합니다."
+        };
+      }
     }
   }
 

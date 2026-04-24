@@ -13,6 +13,7 @@ export async function createReservation(formData: {
   startTime: number;
   guestName?: string;
   guestPhone?: string;
+  password?: string;
 }) {
   try {
     const supabase = await createClient();
@@ -35,9 +36,11 @@ export async function createReservation(formData: {
         roomId: r.roomId,
         startTime: r.startTime,
         date: r.date,
-        userId: r.userId
+        userId: r.userId,
+        guestName: r.guestName
       })),
-      currentUserId: user?.id
+      currentUserId: user?.id,
+      currentGuestName: formData.guestName
     });
 
     if (!validation.allowed) {
@@ -50,6 +53,7 @@ export async function createReservation(formData: {
       userId: user?.id || null,
       guestName: formData.guestName || null,
       guestPhone: formData.guestPhone || null,
+      password: formData.password || null,
       date: formData.date,
       startTime: formData.startTime,
       endTime: formData.startTime + 1,
@@ -71,8 +75,28 @@ export async function createReservation(formData: {
   }
 }
 
-export async function cancelReservation(reservationId: string) {
+export async function cancelReservation(reservationId: string, password?: string) {
   try {
+    // 1. 예약 데이터 조회
+    const reservation = await db.query.reservations.findFirst({
+      where: eq(reservations.id, reservationId),
+    });
+
+    if (!reservation) {
+      return { success: false, error: "예약 정보를 찾을 수 없습니다." };
+    }
+
+    // 2. 비밀번호 확인 (관리자가 아니거나 userId가 없는 경우)
+    if (!reservation.userId) {
+      if (!password) {
+        return { success: false, error: "비밀번호가 필요합니다." };
+      }
+      if (reservation.password !== password) {
+        return { success: false, error: "비밀번호가 일치하지 않습니다." };
+      }
+    }
+
+    // 3. 삭제 실행
     await db.delete(reservations).where(eq(reservations.id, reservationId));
     revalidatePath("/");
     return { success: true };

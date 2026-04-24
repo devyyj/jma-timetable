@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import ReservationSlot from "./ReservationSlot";
 
 interface Room {
@@ -22,99 +22,188 @@ interface TimetableClientProps {
     rooms: Room[];
     reservations: Reservation[];
     today: string;
+    currentHour: number;
   };
 }
 
 export default function TimetableClient({ initialData }: TimetableClientProps) {
   const { rooms, reservations, today } = initialData;
-  const [selectedFloor, setSelectedFloor] = useState<number | "all">("all");
-  const [viewMode, setViewMode] = useState<"grid" | "dashboard">("grid");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "details">("dashboard");
+  const [activeFloor, setActiveFloor] = useState<number>(1);
+  const [currentTime, setCurrentTime] = useState<Date>(new Date());
   
-  const floors = Array.from(new Set(rooms.map((r) => r.floor))).sort();
+  // 실시간 시계 효과
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // 한국 표준시(KST)로 시간 형식 지정
+  const formatKST = (date: Date) => {
+    return date.toLocaleTimeString("ko-KR", {
+      hour12: false,
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      timeZone: "Asia/Seoul"
+    });
+  };
+
+  // 과거 슬롯 비활성화를 위한 현재 시간(KST) 가져오기
+  const nowHourKST = parseInt(currentTime.toLocaleTimeString("en-GB", { 
+    hour: "2-digit", 
+    hour12: false, 
+    timeZone: "Asia/Seoul" 
+  }));
+
   const hours = Array.from({ length: 11 }, (_, i) => i + 13); // 13:00 ~ 23:00
 
-  const filteredRooms = selectedFloor === "all" 
-    ? rooms 
-    : rooms.filter((r) => r.floor === selectedFloor);
+  const renderDetailedGrid = (floor: number) => {
+    const floorRooms = rooms.filter(r => r.floor === floor);
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in duration-300">
+        {floorRooms.map((room) => {
+          return (
+            <div key={room.id} className="border border-slate-100 rounded-3xl p-6 bg-slate-50/30">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-[10px] font-black text-slate-400">{room.floor + 1}층</span>
+                  <h3 className="font-black text-lg text-slate-900 tracking-tight">{room.roomName}</h3>
+                </div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">시간 선택</span>
+              </div>
+              
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                {hours.map((hour) => {
+                  const reservation = reservations.find(
+                    (res) => res.roomId === room.id && res.startTime === hour
+                  );
+                  return (
+                    <ReservationSlot
+                      key={hour}
+                      roomId={room.id}
+                      floor={room.floor}
+                      roomName={room.roomName}
+                      hour={hour}
+                      date={today}
+                      isReserved={!!reservation}
+                      reservationId={reservation?.id}
+                      userName={reservation?.guestName}
+                      compact
+                      disabled={hour < nowHourKST}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // 한국어로 요일이 포함된 날짜 형식 지정
+  const formatDateKST = (date: Date) => {
+    return date.toLocaleDateString("ko-KR", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      weekday: "long",
+      timeZone: "Asia/Seoul"
+    });
+  };
 
   return (
-    <div className="p-4 sm:p-8 bg-white min-h-[600px]">
-      {/* View & Floor Controls */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
-        <div className="flex items-center gap-1 p-1 bg-[#f6f8fa] border border-[#d0d7de] rounded-lg w-fit">
-          <button
-            onClick={() => setViewMode("grid")}
-            className={`px-4 py-1.5 rounded-md text-[13px] font-semibold transition-all ${
-              viewMode === "grid"
-                ? "bg-white text-[#24292f] shadow-sm border border-[#d0d7de]"
-                : "text-[#57606a] hover:text-[#24292f]"
-            }`}
-          >
-            Contribution View
-          </button>
-          <button
-            onClick={() => setViewMode("dashboard")}
-            className={`px-4 py-1.5 rounded-md text-[13px] font-semibold transition-all ${
-              viewMode === "dashboard"
-                ? "bg-white text-[#24292f] shadow-sm border border-[#d0d7de]"
-                : "text-[#57606a] hover:text-[#24292f]"
-            }`}
-          >
-            Card View
-          </button>
-        </div>
-
+    <div className="bg-white">
+      {/* 시간 헤더 */}
+      <div className="px-4 sm:px-8 py-3 bg-slate-900 text-white flex items-center justify-between">
         <div className="flex items-center gap-3">
-           <span className="text-[12px] font-semibold text-[#57606a]">Floor Filter:</span>
-           <div className="flex items-center gap-1">
-            <button
-              onClick={() => setSelectedFloor("all")}
-              className={`px-3 py-1 rounded-md text-[12px] font-bold ${
-                selectedFloor === "all" ? "bg-[#24292f] text-white" : "text-[#0969da] hover:bg-[#afb8c1]/10"
-              }`}
-            >
-              All
-            </button>
-            {floors.map((floor) => (
-              <button
-                key={floor}
-                onClick={() => setSelectedFloor(floor)}
-                className={`px-3 py-1 rounded-md text-[12px] font-bold ${
-                  selectedFloor === floor ? "bg-[#24292f] text-white" : "text-[#0969da] hover:bg-[#afb8c1]/10"
-                }`}
-              >
-                {floor}F
-              </button>
-            ))}
-           </div>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 bg-rose-500 rounded-full animate-pulse"></span>
+            <span className="text-[10px] sm:text-xs font-black uppercase tracking-widest text-slate-400">현재 시각</span>
+          </div>
+          <span className="text-sm sm:text-xl font-mono font-black tabular-nums">
+            {formatKST(currentTime)}
+          </span>
+        </div>
+        <div className="text-[10px] sm:text-xs font-bold text-slate-400">
+          {formatDateKST(currentTime)}
         </div>
       </div>
 
-      {viewMode === "grid" ? (
-        /* --- GITHUB CONTRIBUTION GRID VIEW --- */
-        <div className="border border-[#d0d7de] rounded-lg p-6 bg-white overflow-hidden shadow-sm">
-          <div className="mb-4 flex items-center justify-between">
-            <h4 className="text-[14px] font-semibold text-[#24292f]">
-              {filteredRooms.length} rooms in {today}
-            </h4>
-          </div>
+      {/* 메인 탭 */}
+      <div className="flex border-b border-slate-100 px-4 sm:px-8 pt-4">
+        <button
+          onClick={() => setActiveTab("dashboard")}
+          className={`px-6 py-3 text-sm font-bold transition-all border-b-2 whitespace-nowrap ${
+            activeTab === "dashboard"
+              ? "border-indigo-600 text-indigo-600"
+              : "border-transparent text-slate-400 hover:text-slate-600"
+          }`}
+        >
+          예약 현황
+        </button>
+        <button
+          onClick={() => setActiveTab("details")}
+          className={`px-6 py-3 text-sm font-bold transition-all border-b-2 whitespace-nowrap ${
+            activeTab === "details"
+              ? "border-indigo-600 text-indigo-600"
+              : "border-transparent text-slate-400 hover:text-slate-600"
+          }`}
+        >
+          예약 상세
+        </button>
+      </div>
 
-          <div className="overflow-x-auto scrollbar-hide pb-2">
-            <div className="inline-grid grid-cols-[auto_repeat(11,min-content)] gap-x-[3px] gap-y-[3px]">
-              {/* Top Header (Hours) */}
-              <div /> {/* Empty top-left corner */}
+      <div className="p-4 sm:p-8">
+        {/* 공통 층 선택 버튼 */}
+        <div className="flex gap-2 mb-8 bg-slate-100 p-1 rounded-xl w-fit">
+          <button
+            onClick={() => setActiveFloor(1)}
+            className={`px-8 py-2 rounded-lg text-xs font-black transition-all ${
+              activeFloor === 1 
+                ? "bg-white text-slate-900 shadow-sm" 
+                : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            2층
+          </button>
+          <button
+            onClick={() => setActiveFloor(2)}
+            className={`px-8 py-2 rounded-lg text-xs font-black transition-all ${
+              activeFloor === 2 
+                ? "bg-white text-slate-900 shadow-sm" 
+                : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            3층
+          </button>
+        </div>
+
+        {activeTab === "dashboard" ? (
+          /* --- 예약 현황 보기 --- */
+          <div className="w-full pb-2 animate-in fade-in duration-300">
+            <div className="grid grid-cols-[45px_repeat(11,1fr)] sm:grid-cols-[80px_repeat(11,1fr)] lg:grid-cols-[100px_repeat(11,1fr)] xl:grid-cols-[120px_repeat(11,1fr)] gap-[2px] sm:gap-[4px] items-stretch">
+              {/* 상단 헤더 (시간) */}
+              <div /> {/* 왼쪽 상단 빈 칸 */}
               {hours.map((hour) => (
-                <div key={hour} className="w-[18px] text-center mb-1">
-                  <span className="text-[9px] text-[#57606a] font-medium">{hour}</span>
+                <div key={hour} className="text-center mb-0.5 sm:mb-1">
+                  <span className="text-[7px] sm:text-[9px] md:text-[11px] lg:text-[13px] xl:text-[15px] text-[#57606a] font-bold">
+                    {hour - 12}시
+                  </span>
                 </div>
               ))}
 
-              {/* Grid Rows (Rooms) */}
-              {filteredRooms.map((room) => (
-                <>
-                  <div className="pr-2 flex flex-col items-end justify-center min-w-[80px]">
-                    <span className="text-[10px] text-[#57606a] leading-none mb-0.5 font-bold uppercase tracking-tighter opacity-60">{room.floor}F</span>
-                    <span className="text-[11px] text-[#24292f] font-semibold truncate max-w-[100px]">{room.roomName}</span>
+              {/* 그리드 행 (실) - 선택된 층만 필터링 */}
+              {rooms.filter(r => r.floor === activeFloor).map((room) => (
+                <div key={room.id} className="contents">
+                  <div className="pr-1 sm:pr-3 flex items-center justify-end h-full">
+                    <span className="text-[8px] sm:text-[11px] md:text-[13px] lg:text-[15px] xl:text-[18px] whitespace-nowrap font-black leading-tight text-right">
+                      <span className="text-slate-400 block sm:inline sm:mr-1.5">{room.floor + 1}층</span>
+                      <span className="text-[#24292f]">{room.roomName}</span>
+                    </span>
                   </div>
                   {hours.map((hour) => {
                     const reservation = reservations.find(
@@ -124,79 +213,29 @@ export default function TimetableClient({ initialData }: TimetableClientProps) {
                       <ReservationSlot
                         key={hour}
                         roomId={room.id}
+                        floor={room.floor + 1}
+                        roomName={room.roomName}
                         hour={hour}
                         date={today}
                         isReserved={!!reservation}
                         reservationId={reservation?.id}
                         userName={reservation?.guestName}
                         minimal
+                        disabled={hour < nowHourKST}
                       />
                     );
                   })}
-                </>
+                </div>
               ))}
             </div>
           </div>
-
-          {/* GitHub Style Legend */}
-          <div className="mt-4 flex items-center justify-end gap-1.5 text-[11px] text-[#57606a]">
-            <span>Less</span>
-            <div className="w-[10px] h-[10px] rounded-[2px] bg-[#ebedf0] border border-[rgba(27,31,35,0.06)]" />
-            <div className="w-[10px] h-[10px] rounded-[2px] bg-[#9be9a8] border border-[rgba(27,31,35,0.06)] opacity-50" />
-            <div className="w-[10px] h-[10px] rounded-[2px] bg-[#40c463] border border-[rgba(27,31,35,0.06)] opacity-50" />
-            <div className="w-[10px] h-[10px] rounded-[2px] bg-[#30a14e] border border-[rgba(27,31,35,0.06)] opacity-50" />
-            <div className="w-[10px] h-[10px] rounded-[2px] bg-[#216e39] border border-[#1b6032]" />
-            <span>More</span>
+        ) : (
+          /* --- 상세 보기 --- */
+          <div>
+            {renderDetailedGrid(activeFloor)}
           </div>
-        </div>
-      ) : (
-        /* --- DASHBOARD CARD VIEW --- */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-          {filteredRooms.map((room) => (
-            <div 
-              key={room.id} 
-              className="group bg-white rounded-2xl border border-[#d0d7de] hover:border-indigo-400 hover:shadow-lg transition-all duration-300 overflow-hidden"
-            >
-              <div className="p-5 border-b border-[#f6f8fa] flex justify-between items-start bg-[#f6f8fa]/50">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[10px] font-bold">{room.floor}F</span>
-                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-tight">{room.roomType}</span>
-                  </div>
-                  <h3 className="text-lg font-black text-slate-900 tracking-tight">{room.roomName}</h3>
-                </div>
-              </div>
-              <div className="p-5">
-                <div className="flex gap-[3px] mb-6">
-                  {hours.map((hour) => {
-                    const isReserved = reservations.some((res) => res.roomId === room.id && res.startTime === hour);
-                    return (
-                      <div key={hour} className={`flex-1 h-[14px] rounded-[2px] ${isReserved ? "bg-[#216e39]" : "bg-[#ebedf0]"}`} />
-                    );
-                  })}
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {hours.map((hour) => {
-                    const reservation = reservations.find((res) => res.roomId === room.id && res.startTime === hour);
-                    return (
-                      <ReservationSlot
-                        key={hour}
-                        roomId={room.id}
-                        hour={hour}
-                        date={today}
-                        isReserved={!!reservation}
-                        reservationId={reservation?.id}
-                        userName={reservation?.guestName}
-                        compact
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

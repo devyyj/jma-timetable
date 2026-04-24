@@ -1,10 +1,13 @@
 "use client";
 
-import { useTransition } from "react";
+import { useTransition, useState } from "react";
 import { createReservation, cancelReservation } from "@/app/actions/reservation";
+import ReservationModal from "./ReservationModal";
 
 interface ReservationSlotProps {
   roomId: string;
+  floor: number;
+  roomName: string;
   hour: number;
   date: string;
   isReserved: boolean;
@@ -12,10 +15,13 @@ interface ReservationSlotProps {
   userName?: string | null;
   compact?: boolean;
   minimal?: boolean;
+  disabled?: boolean;
 }
 
 export default function ReservationSlot({
   roomId,
+  floor,
+  roomName,
   hour,
   date,
   isReserved,
@@ -23,112 +29,163 @@ export default function ReservationSlot({
   userName,
   compact,
   minimal,
+  disabled,
 }: ReservationSlotProps) {
   const [isPending, startTransition] = useTransition();
+  const [modalConfig, setModalConfig] = useState<{
+    isOpen: boolean;
+    type: "reservation" | "cancel" | "confirm" | "alert";
+    title: string;
+    description?: string;
+    infoTag?: string;
+  }>({
+    isOpen: false,
+    type: "alert",
+    title: "",
+  });
 
   const handleClick = () => {
-    if (isPending) return;
+    if (isPending || disabled) return;
 
     if (isReserved) {
-      if (confirm(`"${userName}"님의 예약을 취소하시겠습니까?`)) {
-        startTransition(async () => {
-          await cancelReservation(reservationId!);
-        });
-      }
+      setModalConfig({
+        isOpen: true,
+        type: "cancel",
+        title: "예약 취소",
+        description: `"${userName}"님의 예약을 취소하시겠습니까?`,
+        infoTag: `${floor}층 ${roomName} (${hour-12}시)`,
+      });
     } else {
-      const name = prompt("예약자 성함을 입력해주세요.");
-      if (name) {
-        startTransition(async () => {
-          const result = await createReservation({
-            roomId,
-            date,
-            startTime: hour,
-            guestName: name,
-          });
-          if (!result.success) {
-            alert(result.error);
-          }
-        });
-      }
+      setModalConfig({
+        isOpen: true,
+        type: "reservation",
+        title: "연습실 예약",
+        description: "예약 정보를 입력해주세요. 취소 시 비밀번호가 필요합니다.",
+        infoTag: `${floor}층 ${roomName} (${hour-12}시)`,
+      });
     }
   };
 
-  // 1. GitHub "Grass" Grid Mode (Square Block)
+  const handleConfirm = async (data: { name?: string; password?: string }) => {
+    // 알림창(alert)인 경우 확인 버튼은 단순히 창을 닫는 역할이므로 로직을 실행하지 않음
+    if (modalConfig.type === "alert") {
+      setModalConfig((prev) => ({ ...prev, isOpen: false }));
+      return;
+    }
+
+    setModalConfig((prev) => ({ ...prev, isOpen: false }));
+
+    if (isReserved) {
+      startTransition(async () => {
+        const result = await cancelReservation(reservationId!, data.password);
+        if (!result.success) {
+          setModalConfig({
+            isOpen: true,
+            type: "alert",
+            title: "취소 실패",
+            description: result.error,
+            infoTag: `${floor}층 ${roomName}`,
+          });
+        }
+      });
+    } else if (data.name && data.password) {
+      startTransition(async () => {
+        const result = await createReservation({
+          roomId,
+          date,
+          startTime: hour,
+          guestName: data.name,
+          password: data.password,
+        });
+        if (!result.success) {
+          setModalConfig({
+            isOpen: true,
+            type: "alert",
+            title: "예약 실패",
+            description: result.error,
+            infoTag: `${floor}층 ${roomName}`,
+          });
+        }
+      });
+    }
+  };
+
+  // 1. "예약 현황" 그리드 모드 (사각형 슬롯)
   if (minimal) {
     return (
-      <button
-        onClick={handleClick}
-        disabled={isPending}
-        title={`${hour}:00 - ${isReserved ? userName : "Available"}`}
-        className={`
-          w-[14px] h-[14px] sm:w-[18px] sm:h-[18px] rounded-[2px] transition-all duration-300
-          ${
-            isReserved
-              ? "bg-[#216e39] border border-[#1b6032]" 
-              : "bg-[#ebedf0] border border-[rgba(27,31,35,0.06)] hover:bg-[#c6e48b]"
-          }
-          ${isPending ? "opacity-40 grayscale" : "active:scale-90"}
-        `}
-      />
+      <>
+        <button
+          onClick={handleClick}
+          disabled={isPending || disabled}
+          title={`${hour-12}시 - ${disabled ? (isReserved ? `${userName} (종료)` : "종료") : isReserved ? userName : "예약 가능"}`}
+          className={`
+            w-full aspect-square rounded-[1px] sm:rounded-[2px] transition-all duration-300
+            ${
+              disabled
+                ? isReserved 
+                  ? "bg-emerald-100/80 border border-emerald-200/50 cursor-not-allowed" // 과거 예약됨: 차분한 연녹색
+                  : "bg-slate-200/60 border-transparent cursor-not-allowed" // 과거 비어있음: 어두운 회색
+                : isReserved
+                  ? "bg-emerald-600 border border-emerald-700/20 shadow-sm" // 현재/미래 예약됨: 선명한 에메랄드
+                  : "bg-white border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/30" // 예약 가능: 흰색
+            }
+            ${isPending ? "opacity-40 grayscale" : !disabled ? "active:scale-90" : ""}
+          `}
+        />
+        <ReservationModal 
+          {...modalConfig} 
+          onClose={() => setModalConfig((prev) => ({ ...prev, isOpen: false }))}
+          onConfirm={handleConfirm}
+        />
+      </>
     );
   }
 
-  // 2. Compact Dashboard Mode (Number + Dot)
+  // 2. "예약하기" 카드 모드 (숫자 버튼)
   if (compact) {
     return (
-      <button
-        onClick={handleClick}
-        disabled={isPending}
-        className={`
-          w-full py-2.5 rounded-xl text-[11px] font-black transition-all duration-300 flex items-center justify-center gap-1.5
-          ${
-            isReserved
-              ? "bg-slate-900 text-white shadow-sm shadow-slate-200"
-              : "bg-white text-slate-400 border border-slate-100 hover:border-indigo-200 hover:text-indigo-600 hover:bg-indigo-50/50"
-          }
-          ${isPending ? "opacity-40 grayscale" : "active:scale-90"}
-        `}
-      >
-        <span className={isReserved ? "opacity-60" : ""}>{hour}</span>
-        {isReserved ? (
-          <div className="w-1 h-1 bg-indigo-400 rounded-full" />
-        ) : (
-          <div className="w-1 h-1 bg-slate-200 rounded-full" />
-        )}
-      </button>
+      <>
+        <button
+          onClick={handleClick}
+          disabled={isPending || disabled}
+          className={`
+            w-full py-2 sm:py-2.5 rounded-xl text-[11px] font-black transition-all duration-300 flex flex-col items-center justify-center
+            ${
+              disabled
+                ? isReserved
+                  ? "bg-emerald-50 text-emerald-600/50 border border-emerald-100 cursor-not-allowed" // 과거 예약됨
+                  : "bg-slate-50 text-slate-300 cursor-not-allowed border border-transparent" // 과거 비어있음
+                : isReserved
+                  ? "bg-emerald-600 text-white shadow-md shadow-emerald-100" // 현재/미래 예약됨
+                  : "bg-white text-slate-600 border border-slate-200 hover:border-emerald-400 hover:text-emerald-600 hover:shadow-sm" // 예약 가능
+            }
+            ${isPending ? "opacity-40 grayscale" : !disabled ? "active:scale-90" : ""}
+          `}
+        >
+          <div className="flex items-center gap-1.5">
+            <span className={isReserved ? "opacity-100" : disabled ? "opacity-50" : ""}>
+              {hour - 12}시
+            </span>
+            {isReserved ? (
+              <div className={`w-1 h-1 rounded-full ${disabled ? "bg-emerald-200" : "bg-white/60"}`} />
+            ) : (
+              <div className={`w-1 h-1 rounded-full ${disabled ? "bg-slate-200" : "bg-emerald-400"}`} />
+            )}
+          </div>
+          {isReserved && (
+            <span className={`text-[9px] mt-0.5 truncate max-w-[80%] ${disabled ? "text-emerald-600/40" : "text-white/80"}`}>
+              {userName}
+            </span>
+          )}
+        </button>
+        <ReservationModal 
+          {...modalConfig} 
+          onClose={() => setModalConfig((prev) => ({ ...prev, isOpen: false }))}
+          onConfirm={handleConfirm}
+        />
+      </>
     );
   }
 
-  // 3. Original Large Table Mode (Icon + Text)
-  return (
-    <button
-      onClick={handleClick}
-      disabled={isPending}
-      className={`
-        w-full h-14 sm:h-12 rounded-xl text-xs font-black transition-all duration-300 flex flex-col items-center justify-center gap-0.5
-        ${
-          isReserved
-            ? "bg-slate-900 text-white shadow-md shadow-slate-200 hover:bg-slate-800 active:scale-[0.97]"
-            : "bg-white text-slate-400 border border-slate-100 hover:border-indigo-200 hover:text-indigo-600 hover:bg-indigo-50/30 hover:shadow-sm active:scale-[0.97]"
-        }
-        ${isPending ? "opacity-40 cursor-not-allowed grayscale" : ""}
-      `}
-    >
-      {isReserved ? (
-        <>
-          <span className="truncate max-w-[70px] sm:max-w-[90px] text-[10px] sm:text-[11px] font-black tracking-tight">{userName}</span>
-          <div className="flex items-center gap-0.5 opacity-60">
-            <span className="text-[8px] uppercase tracking-tighter">Booked</span>
-          </div>
-        </>
-      ) : (
-        <>
-          <svg className="w-4 h-4 mb-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-          </svg>
-          <span className="text-[8px] uppercase tracking-widest font-bold">Open</span>
-        </>
-      )}
-    </button>
-  );
+  return null;
 }
